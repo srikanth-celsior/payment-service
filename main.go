@@ -3,6 +3,7 @@ package main
 import (
 	"log"
 	"payment-service/database"
+	"payment-service/handlers"
 	"payment-service/pubsub"
 
 	"github.com/joho/godotenv"
@@ -30,6 +31,9 @@ func main() {
 	app.Get("/", func(ctx iris.Context) {
 		ctx.WriteString("Payment Service is running")
 	})
+
+	// Register payments API
+	app.Get("/payments", handlers.GetAllPayments)
 	if err := app.Listen(":3001"); err != nil {
 		log.Fatalf("Failed to start HTTP server: %v", err)
 	}
