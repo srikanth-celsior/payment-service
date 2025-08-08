@@ -20,22 +20,24 @@ func main() {
 
 	utils.Startup(log)
 
+	if err := database.Connect(); err != nil {
+		log.WithError(err).Fatal("DB connection failed")
+	}
 	go func() {
 		if err := pubsub.ListenForOrders(); err != nil {
 			log.WithError(err).Error("Pub/Sub listen error")
 		}
 	}()
 
-	utils.Startup(log)
-	if err := database.Connect(); err != nil {
-		log.WithError(err).Fatal("DB connection failed")
-	}
-
 	app := iris.New()
 	SetupRouter(app)
 
 	go func() {
-		if err := app.Listen(":3001", iris.WithoutInterruptHandler); err != nil {
+		port := os.Getenv("PORT")
+		if port == "" {
+			port = "8080"
+		}
+		if err := app.Listen(":" + port); err != nil {
 			log.WithError(err).Fatal("Failed to start HTTP server")
 		}
 	}()
