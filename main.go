@@ -1,42 +1,53 @@
 package main
 
 import (
-	"log"
+	"context"
+	"os"
+	"os/signal"
 	"payment-service/database"
-	"payment-service/handlers"
 	"payment-service/pubsub"
 	"payment-service/utils"
+	"syscall"
+	"time"
 
-	"github.com/joho/godotenv"
 	"github.com/kataras/iris/v12"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	// Load .env variables
-	_ = godotenv.Load()
-	utils.InitRedis()
+	log := logrus.New()
+	log.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
 
-	// Connect to DB
-	if err := database.Connect(); err != nil {
-		log.Fatal("DB connection failed:", err)
-	}
+	utils.Startup(log)
 
-	// Start listening to Pub/Sub in a goroutine (non-blocking)
 	go func() {
 		if err := pubsub.ListenForOrders(); err != nil {
-			log.Fatalf("Pub/Sub listen error: %v", err)
+			log.WithError(err).Error("Pub/Sub listen error")
 		}
 	}()
 
-	// Start HTTP server for health check or future use
-	app := iris.New()
-	app.Get("/", func(ctx iris.Context) {
-		ctx.WriteString("Payment Service is running")
-	})
-
-	// Register payments API
-	app.Get("/payments", handlers.GetAllPayments)
-	if err := app.Listen(":3001"); err != nil {
-		log.Fatalf("Failed to start HTTP server: %v", err)
+	utils.Startup(log)
+	if err := database.Connect(); err != nil {
+		log.WithError(err).Fatal("DB connection failed")
 	}
+
+	app := iris.New()
+	SetupRouter(app)
+
+	go func() {
+		if err := app.Listen(":3001", iris.WithoutInterruptHandler); err != nil {
+			log.WithError(err).Fatal("Failed to start HTTP server")
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, os.Interrupt, syscall.SIGTERM)
+	<-quit
+	log.Info("Shutting down server...")
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := app.Shutdown(ctx); err != nil {
+		log.WithError(err).Error("Server forced to shutdown")
+	}
+	log.Info("Server exited cleanly")
 }
