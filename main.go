@@ -5,6 +5,7 @@ import (
 	"payment-service/database"
 	"payment-service/handlers"
 	"payment-service/pubsub"
+	"payment-service/utils"
 
 	"github.com/joho/godotenv"
 	"github.com/kataras/iris/v12"
@@ -13,6 +14,7 @@ import (
 func main() {
 	// Load .env variables
 	_ = godotenv.Load()
+	utils.InitRedis()
 
 	// Connect to DB
 	if err := database.Connect(); err != nil {
